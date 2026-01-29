@@ -72,6 +72,29 @@ class PRD(BaseModel):
                 return item
         return None
 
+    def get_next_item(self) -> tuple[Optional[WorkItem], bool]:
+        """Get the next item to work on.
+
+        Returns (item, is_resuming) where:
+        - item: The work item to process, or None if nothing to do
+        - is_resuming: True if resuming a "doing" item, False if starting fresh
+
+        Priority:
+        1. First item with state == "doing" (resume interrupted work)
+        2. First item with state == "todo" (start new work)
+        """
+        # First, check for any in-progress item to resume
+        for item in self.items:
+            if item.status.state == ItemState.DOING:
+                return item, True
+
+        # Otherwise, pick the first todo item
+        for item in self.items:
+            if item.status.state == ItemState.TODO:
+                return item, False
+
+        return None, False
+
     def get_item_by_id(self, item_id: str) -> Optional[WorkItem]:
         """Get an item by its ID."""
         for item in self.items:

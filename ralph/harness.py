@@ -72,41 +72,6 @@ def is_git_repo(path: Path) -> bool:
     return result.returncode == 0
 
 
-def has_commits(repo_root: Path) -> bool:
-    """Check if the repository has any commits."""
-    result = subprocess.run(
-        ["git", "rev-parse", "HEAD"],
-        cwd=repo_root,
-        capture_output=True,
-        text=True,
-    )
-    return result.returncode == 0
-
-
-def git_reset_hard(repo_root: Path) -> bool:
-    """Reset the repo to HEAD and clean untracked files (excluding .ralph)."""
-    try:
-        # Only reset if there are commits
-        if has_commits(repo_root):
-            subprocess.run(
-                ["git", "reset", "--hard", "HEAD"],
-                cwd=repo_root,
-                check=True,
-                capture_output=True,
-            )
-        # Clean untracked files, excluding .ralph directory
-        subprocess.run(
-            ["git", "clean", "-fd", "--exclude", RALPH_DIR],
-            cwd=repo_root,
-            check=True,
-            capture_output=True,
-        )
-        return True
-    except subprocess.CalledProcessError as e:
-        console.print(f"[red]Git reset failed: {e}[/red]")
-        return False
-
-
 def git_commit(repo_root: Path, message: str) -> bool:
     """Stage all changes and commit."""
     try:
@@ -348,30 +313,39 @@ def run_loop(
             append_progress(repo_root, "=== All items complete ===")
             return 0
 
-        # Select next item
-        item = prd.get_next_todo()
+        # Select next item (resume "doing" first, then "todo")
+        item, is_resuming = prd.get_next_item()
         if item is None:
-            console.print("\n[yellow]No more todo items available[/yellow]")
+            console.print("\n[yellow]No more items to process[/yellow]")
             counts = prd.count_by_state()
             console.print(
-                f"  Done: {counts[ItemState.DONE]}, Blocked: {counts[ItemState.BLOCKED]}, Doing: {counts[ItemState.DOING]}"
+                f"  Done: {counts[ItemState.DONE]}, Blocked: {counts[ItemState.BLOCKED]}"
             )
-            append_progress(repo_root, "=== No more todo items ===")
+            append_progress(repo_root, "=== No more items to process ===")
             return 0 if counts[ItemState.BLOCKED] == 0 else 1
 
         iteration += 1
         console.print(f"\n[bold]Iteration {iteration}/{max_iterations}[/bold]")
         console.print(f"  Item: [cyan]{item.id}[/cyan] - {item.title}")
-        console.print(f"  Attempt: {item.status.attempts + 1}")
 
-        # Mark as doing and increment attempts (crash-safe write)
-        item.status.state = ItemState.DOING
-        item.status.attempts += 1
-        save_prd(repo_root, prd)
-        append_progress(
-            repo_root,
-            f"Starting item {item.id} (attempt {item.status.attempts}): {item.title}",
-        )
+        if is_resuming:
+            console.print(
+                f"  [yellow]Resuming[/yellow] (attempt {item.status.attempts})"
+            )
+            append_progress(
+                repo_root,
+                f"Resuming item {item.id} (attempt {item.status.attempts}): {item.title}",
+            )
+        else:
+            # Mark as doing and increment attempts (crash-safe write)
+            item.status.state = ItemState.DOING
+            item.status.attempts += 1
+            save_prd(repo_root, prd)
+            console.print(f"  Attempt: {item.status.attempts}")
+            append_progress(
+                repo_root,
+                f"Starting item {item.id} (attempt {item.status.attempts}): {item.title}",
+            )
 
         # Build prompt and run agent
         prompt = build_agent_prompt(item, prd, repo_root)
@@ -397,10 +371,6 @@ def run_loop(
             append_progress(
                 repo_root, f"Item {item.id} failed (agent error): {agent_error[:200]}"
             )
-
-            # Revert repo
-            console.print("Reverting repository...")
-            git_reset_hard(repo_root)
             continue
 
         # Run verification
@@ -458,10 +428,6 @@ def run_loop(
             append_progress(
                 repo_root, f"Item {item.id} failed verification: {error_summary[:200]}"
             )
-
-            # Revert repo
-            console.print("Reverting repository...")
-            git_reset_hard(repo_root)
 
     # Loop ended due to limits
     if failures >= max_failures:
