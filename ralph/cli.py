@@ -124,9 +124,74 @@ def init(
     # Create empty progress log
     progress_path.touch()
 
+    # Create README for agents
+    readme_path = ralph_dir / "README.md"
+    readme_content = '''# Ralph Project Directory
+
+This directory contains the PRD (Product Requirements Document) and progress tracking for this project.
+
+## Files
+
+- **prd.json**: The PRD containing all work items. Edit this file to add, remove, or update tasks.
+- **progress.txt**: A timestamped log of all actions taken by the Ralph harness.
+
+## Working with the PRD
+
+The PRD is organized into work items, each with:
+- `id`: Unique identifier (e.g., "001", "002")
+- `title`: Brief description
+- `description`: Detailed task description
+- `acceptance_criteria`: List of conditions that must be met
+- `files_hint` (optional): Suggested files to work on
+- `verify` (optional): Verification commands to run
+- `status`: Current state (todo/doing/done/blocked) and tracking
+
+### Item States
+
+- **todo**: Ready to start
+- **doing**: Currently in progress (resumes here after crashes)
+- **done**: Successfully completed
+- **blocked**: Failed multiple times (check `last_error`)
+
+### Example Work Item
+
+```json
+{
+  "id": "001",
+  "title": "Implement user authentication",
+  "description": "Add login and registration endpoints",
+  "acceptance_criteria": [
+    "Users can register with email/password",
+    "Users can login and receive a session token",
+    "Passwords are hashed"
+  ],
+  "files_hint": ["auth.py", "models.py"],
+  "verify": ["pytest tests/test_auth.py"],
+  "status": {
+    "state": "todo",
+    "attempts": 0,
+    "last_error": null,
+    "done_at": null
+  }
+}
+```
+
+## Progress Tracking
+
+The `progress.txt` file contains a chronological log of all actions:
+- Items started/resumed
+- Completion or failure messages
+- Error details for debugging
+
+When an agent is interrupted, it will resume from the last "doing" item.
+'''
+    with open(readme_path, "w") as f:
+        f.write(readme_content)
+
     console.print(f"[green]Initialized ralph in {ralph_dir}[/green]")
     console.print(f"  Created: {prd_path}")
     console.print(f"  Created: {progress_path}")
+    console.print(f"  Created: {readme_path}")
     console.print()
     console.print("Next steps:")
     console.print(f"  1. Edit {prd_path} to add your work items")

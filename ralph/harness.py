@@ -13,7 +13,7 @@ console = Console()
 
 RALPH_DIR = ".ralph"
 PRD_FILE = "prd.json"
-PROGRESS_FILE = "progress.log"
+PROGRESS_FILE = "progress.txt"
 
 # Default blocked threshold - mark as blocked after this many failed attempts
 BLOCKED_THRESHOLD = 3
