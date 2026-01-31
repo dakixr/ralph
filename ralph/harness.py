@@ -181,7 +181,6 @@ def run_verification(repo_root: Path, commands: list[str]) -> tuple[bool, list[d
                 cwd=repo_root,
                 capture_output=True,
                 text=True,
-                timeout=300,  # 5 minute timeout per command
             )
             passed = result.returncode == 0
             results.append(
@@ -198,18 +197,6 @@ def run_verification(repo_root: Path, commands: list[str]) -> tuple[bool, list[d
             else:
                 console.print(f"    [red]FAILED (exit code {result.returncode})[/red]")
                 all_passed = False
-        except subprocess.TimeoutExpired:
-            results.append(
-                {
-                    "command": cmd,
-                    "passed": False,
-                    "returncode": -1,
-                    "stdout": "",
-                    "stderr": "Command timed out after 300 seconds",
-                }
-            )
-            console.print("    [red]TIMEOUT[/red]")
-            all_passed = False
         except Exception as e:
             results.append(
                 {
@@ -231,32 +218,24 @@ def run_agent(repo_root: Path, prompt: str, model: str) -> tuple[bool, str]:
 
     Returns (success, error_message).
     """
-    agent_command = ["opencode", "-m", model, "-p"]
-    console.print(f"  Agent command: [cyan]{' '.join(agent_command)}[/cyan]")
+    agent_command = ["opencode", "-m", model, "run", prompt]
+    # Don't print the full prompt (it can be huge). Keep logging concise.
+    console.print(f"  Agent command: [cyan]opencode -m {model} run <prompt>[/cyan]")
 
     try:
-        # Run the agent, passing the prompt via stdin
+        # Important: do NOT pipe stdout/stderr. Some agents switch behavior and
+        # may not emit output when not connected to a real TTY. Inheriting the
+        # parent's streams guarantees visibility in the main process.
         result = subprocess.run(
             agent_command,
             cwd=repo_root,
-            input=prompt,
-            capture_output=True,
-            text=True,
-            timeout=1800,  # 30 minute timeout for agent
         )
 
         if result.returncode != 0:
-            error_msg = (
-                result.stderr[-1000:]
-                if result.stderr
-                else f"Exit code {result.returncode}"
-            )
-            return False, error_msg
+            return False, f"Exit code {result.returncode}"
 
         return True, ""
 
-    except subprocess.TimeoutExpired:
-        return False, "Agent timed out after 30 minutes"
     except Exception as e:
         return False, str(e)
 
@@ -327,6 +306,21 @@ def run_loop(
         iteration += 1
         console.print(f"\n[bold]Iteration {iteration}/{max_iterations}[/bold]")
         console.print(f"  Item: [cyan]{item.id}[/cyan] - {item.title}")
+        if item.description:
+            console.print(f"\n[bold]Description[/bold]\n{item.description.strip()}")
+        if item.acceptance_criteria:
+            console.print("\n[bold]Acceptance Criteria[/bold]")
+            for criterion in item.acceptance_criteria:
+                console.print(f"- {criterion}")
+        if item.files_hint:
+            console.print("\n[bold]Files[/bold]")
+            for f in item.files_hint:
+                console.print(f"- {f}")
+        verify_commands_preview = item.verify or prd.global_config.verify
+        if verify_commands_preview:
+            console.print("\n[bold]Verify[/bold]")
+            for cmd in verify_commands_preview:
+                console.print(f"- {cmd}")
 
         if is_resuming:
             console.print(

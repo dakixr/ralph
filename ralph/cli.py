@@ -34,7 +34,6 @@ def get_available_models() -> list[str]:
             ["opencode", "models"],
             capture_output=True,
             text=True,
-            timeout=30,
         )
         if result.returncode == 0:
             return [
@@ -126,7 +125,7 @@ def init(
 
     # Create README for agents
     readme_path = ralph_dir / "README.md"
-    readme_content = '''# Ralph Project Directory
+    readme_content = """# Ralph Project Directory
 
 This directory contains the PRD (Product Requirements Document) and progress tracking for this project.
 
@@ -184,7 +183,7 @@ The `progress.txt` file contains a chronological log of all actions:
 - Error details for debugging
 
 When an agent is interrupted, it will resume from the last "doing" item.
-'''
+"""
     with open(readme_path, "w") as f:
         f.write(readme_content)
 
